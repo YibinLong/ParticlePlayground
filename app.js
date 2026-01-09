@@ -70,6 +70,8 @@ class App {
         this.attractBtn = document.getElementById('attract-btn');
         this.repelBtn = document.getElementById('repel-btn');
         this.themeNameEl = document.getElementById('theme-name');
+        this.particleCountEl = document.getElementById('particle-count');
+        this.countValueEl = this.particleCountEl.querySelector('.count-value');
 
         this.init();
     }
@@ -242,7 +244,15 @@ class App {
         // Render particles
         this.particleSystem.render();
 
+        // Update particle count display
+        this.updateParticleCount();
+
         requestAnimationFrame(() => this.animate());
+    }
+
+    updateParticleCount() {
+        const count = this.particleSystem.getActiveParticleCount();
+        this.countValueEl.textContent = count.toLocaleString();
     }
 
     extractLandmarks(results) {

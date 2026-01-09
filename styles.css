@@ -204,6 +204,39 @@ body {
     color: #e2e8f0;
 }
 
+/* Particle Count Display */
+.particle-count {
+    position: absolute;
+    top: 56px;
+    right: 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 100;
+}
+
+.count-value {
+    font-size: 1rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, #00d4ff, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.count-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 /* Mode Controls */
 .mode-controls {
     position: absolute;

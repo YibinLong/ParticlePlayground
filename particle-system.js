@@ -112,6 +112,10 @@ export class ParticleSystem {
         this.canvas.height = height;
     }
 
+    getActiveParticleCount() {
+        return this.particleCount;
+    }
+
     update(landmarks) {
         // Extract all targets from landmarks
         this.extractTargets(landmarks);
