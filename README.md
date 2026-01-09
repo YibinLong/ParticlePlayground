@@ -19,11 +19,10 @@ A real-time particle simulator where thousands of particles flow to form the sha
 
 ## Controls
 
-| Key | Action |
-|-----|--------|
+| Key/Gesture | Action |
+|-------------|--------|
 | `SPACE` | Toggle Attract/Repel mode |
 | `V` | Toggle camera preview visibility |
-| `T` | Cycle color theme |
 | Fist gesture | Cycle color theme |
 
 ## Technical Details
