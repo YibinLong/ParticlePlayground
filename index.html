@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Playground - Real-time Face & Hand Tracking</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Intro Screen -->
+    <div id="intro-screen" class="intro-screen">
+        <div class="intro-content">
+            <h1 class="intro-title">Particle Playground</h1>
+            <p class="intro-subtitle">Watch thousands of particles flow to form your face and hands</p>
+            <button id="enable-camera-btn" class="enable-camera-btn">
+                <span class="btn-icon">📷</span>
+                <span class="btn-text">Enable Camera</span>
+            </button>
+            <p class="intro-hint">Requires camera access for face and hand tracking</p>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="app" class="app hidden">
+        <!-- Particle Canvas (fullscreen) -->
+        <canvas id="particle-canvas"></canvas>
+
+        <!-- Camera Preview Overlay -->
+        <div id="camera-preview" class="camera-preview">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="overlay-canvas"></canvas>
+        </div>
+
+        <!-- Status Indicator -->
+        <div id="status" class="status">
+            <span class="status-dot"></span>
+            <span class="status-text">Loading...</span>
+        </div>
+
+        <!-- Mode Toggle Buttons -->
+        <div id="mode-controls" class="mode-controls">
+            <button id="attract-btn" class="mode-btn active" data-mode="attract">Attract</button>
+            <button id="repel-btn" class="mode-btn" data-mode="repel">Repel</button>
+        </div>
+
+        <!-- Theme Display -->
+        <div id="theme-display" class="theme-display">
+            <span class="theme-label">Theme:</span>
+            <span id="theme-name" class="theme-name">Rainbow</span>
+        </div>
+
+        <!-- Keyboard Shortcuts -->
+        <div id="shortcuts" class="shortcuts">
+            <div class="shortcut">
+                <kbd>SPACE</kbd>
+                <span>Toggle Mode</span>
+            </div>
+            <div class="shortcut">
+                <kbd>V</kbd>
+                <span>Toggle Camera</span>
+            </div>
+            <div class="shortcut">
+                <kbd>T</kbd>
+                <span>Change Theme</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
