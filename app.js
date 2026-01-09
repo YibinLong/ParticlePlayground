@@ -54,8 +54,6 @@ class App {
         this.mode = 'attract';
         this.currentThemeIndex = 0;
         this.cameraVisible = true;
-        this.lastFistTime = 0;
-        this.fistCooldown = 1000; // 1 second cooldown for theme change
 
         // DOM Elements
         this.introScreen = document.getElementById('intro-screen');
@@ -172,6 +170,9 @@ class App {
             case 'KeyV':
                 this.toggleCamera();
                 break;
+            case 'KeyB':
+                this.cycleTheme();
+                break;
         }
     }
 
@@ -223,17 +224,6 @@ class App {
             this.updateStatus('detecting', 'Tracking active');
         } else {
             this.updateStatus('waiting', 'Show your hands!');
-        }
-
-        // Detect fist gesture for theme cycling
-        if (hasHands) {
-            const isFist = this.gestureDetector.detectFist(results.hands);
-            const now = Date.now();
-
-            if (isFist && now - this.lastFistTime > this.fistCooldown) {
-                this.lastFistTime = now;
-                this.cycleTheme();
-            }
         }
 
         // Extract landmarks for particles

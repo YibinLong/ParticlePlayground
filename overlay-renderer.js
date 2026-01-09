@@ -12,14 +12,14 @@ export class OverlayRenderer {
         this.width = canvas.width;
         this.height = canvas.height;
 
-        // Colors
+        // Colors - All dark green
         this.colors = {
-            handLeft: '#00ffff',      // Cyan for left hand
-            handRight: '#ff69b4',     // Pink for right hand
-            eyeTeal: '#00d4aa',       // Teal for eyes
-            lipsPink: '#ff6b9d',      // Pink for lips
-            faceOvalCyan: '#00d4ff',  // Cyan for face oval
-            nosePurple: '#9d4edd'     // Purple for nose
+            handLeft: '#0d6b0d',      // Dark green for left hand
+            handRight: '#0d6b0d',     // Dark green for right hand
+            eyes: '#0d6b0d',          // Dark green for eyes
+            lips: '#0d6b0d',          // Dark green for lips
+            faceOval: '#0d6b0d',      // Dark green for face oval
+            nose: '#0d6b0d'           // Dark green for nose
         };
 
         // Multi-layer glow configuration
@@ -137,28 +137,28 @@ export class OverlayRenderer {
         this.ctx.save();
 
         // Draw face oval
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.FACE_OVAL, this.colors.faceOvalCyan, 1.5, 10);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.FACE_OVAL, this.colors.faceOval, 1.5, 10);
 
         // Draw eyes
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.LEFT_EYE, this.colors.eyeTeal, 1, 8, true);
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.RIGHT_EYE, this.colors.eyeTeal, 1, 8, true);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.LEFT_EYE, this.colors.eyes, 1, 8, true);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.RIGHT_EYE, this.colors.eyes, 1, 8, true);
 
         // Draw eyebrows
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.LEFT_EYE_BROW, this.colors.eyeTeal, 1, 6);
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.RIGHT_EYE_BROW, this.colors.eyeTeal, 1, 6);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.LEFT_EYE_BROW, this.colors.eyes, 1, 6);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.RIGHT_EYE_BROW, this.colors.eyes, 1, 6);
 
         // Draw lips
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.LIPS_OUTER, this.colors.lipsPink, 1.5, 10, true);
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.LIPS_INNER, this.colors.lipsPink, 1, 6, true);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.LIPS_OUTER, this.colors.lips, 1.5, 10, true);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.LIPS_INNER, this.colors.lips, 1, 6, true);
 
         // Draw nose
-        this.drawFaceContour(landmarks, FACE_LANDMARKS.NOSE_BRIDGE, this.colors.nosePurple, 1, 6);
-        this.drawFaceContour(landmarks, [...FACE_LANDMARKS.NOSE_BOTTOM, FACE_LANDMARKS.NOSE_TIP[0]], this.colors.nosePurple, 1, 6);
+        this.drawFaceContour(landmarks, FACE_LANDMARKS.NOSE_BRIDGE, this.colors.nose, 1, 6);
+        this.drawFaceContour(landmarks, [...FACE_LANDMARKS.NOSE_BOTTOM, FACE_LANDMARKS.NOSE_TIP[0]], this.colors.nose, 1, 6);
 
         // Draw irises if available (468+ landmarks means refined face)
         if (landmarks.length > 468) {
-            this.ctx.fillStyle = this.colors.eyeTeal;
-            this.ctx.shadowColor = this.colors.eyeTeal;
+            this.ctx.fillStyle = this.colors.eyes;
+            this.ctx.shadowColor = this.colors.eyes;
             this.ctx.shadowBlur = 8;
 
             // Left iris center
