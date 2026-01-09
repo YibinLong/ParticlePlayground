@@ -4,7 +4,7 @@
  */
 
 // MediaPipe Vision Tasks CDN
-const VISION_TASKS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const VISION_TASKS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18';
 
 export class MediaPipeTracker {
     constructor(videoElement) {
@@ -20,10 +20,8 @@ export class MediaPipeTracker {
     }
 
     async initialize() {
-        // Load the Vision Tasks library
-        await this.loadScript(`${VISION_TASKS_CDN}/vision_bundle.js`);
-
-        const vision = window;
+        // Dynamically import the Vision Tasks ES module
+        const vision = await import(`${VISION_TASKS_CDN}/vision_bundle.mjs`);
         const { HandLandmarker, FaceLandmarker, FilesetResolver } = vision;
 
         // Initialize the fileset resolver

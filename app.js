@@ -132,7 +132,11 @@ class App {
 
         } catch (error) {
             console.error('Failed to start:', error);
-            this.updateStatus('error', 'Camera access denied');
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                this.updateStatus('error', 'Camera access denied');
+            } else {
+                this.updateStatus('error', 'Failed to load: ' + error.message);
+            }
         }
     }
 
