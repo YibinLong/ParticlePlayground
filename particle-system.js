@@ -46,21 +46,23 @@ export class ParticleSystem {
         // Mode: 'attract' or 'repel'
         this.mode = 'attract';
 
-        // Particle physics
-        this.attractionForce = 0.08;
-        this.repelForce = 0.15;
-        this.friction = 0.92;
-        this.maxSpeed = 15;
+        // Particle physics - tuned for liquid-like flow
+        this.attractionForce = 0.12;
+        this.repelForce = 0.2;
+        this.friction = 0.94;
+        this.maxSpeed = 12;
 
         // Trail effect
-        this.trailAlpha = 0.15;
+        this.trailAlpha = 0.12;
 
         // Particle array
         this.particles = [];
 
-        // Target landmarks
+        // Target landmarks (current and previous for smoothing)
         this.targets = [];
+        this.prevTargets = [];
         this.targetWeights = [];
+        this.targetSmoothing = 0.3; // Interpolation factor
 
         // Initialize particles
         this.initParticles();
@@ -318,31 +320,47 @@ export class ParticleSystem {
         // Distribute particles evenly across targets
         if (this.targets.length === 0) return;
 
-        // Assign target based on particle index
-        const targetIndex = particleIndex % this.targets.length;
+        // Assign target based on particle index with some variation
+        const baseIndex = particleIndex % this.targets.length;
+        // Add slight variation for more organic distribution
+        const variation = Math.floor(Math.sin(particleIndex * 0.1) * 3);
+        const targetIndex = (baseIndex + variation + this.targets.length) % this.targets.length;
         const target = this.targets[targetIndex];
 
         const dx = target.x - p.x;
         const dy = target.y - p.y;
         const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
 
-        // Calculate force
+        // Calculate force with smooth falloff
         let force;
         if (this.mode === 'attract') {
-            // Attraction - stronger when far, gentler when close
-            force = this.attractionForce * Math.min(1, dist / 100) * target.weight;
+            // Attraction with smooth easing - feels like liquid cohesion
+            const distFactor = 1 - Math.exp(-dist / 150);
+            force = this.attractionForce * distFactor * target.weight;
+
+            // Add settling force when very close (particles settle into place)
+            if (dist < 20) {
+                force *= 0.5 + (dist / 40);
+            }
         } else {
-            // Repulsion - stronger when close
-            force = -this.repelForce * Math.max(0.1, 50 / dist) * target.weight;
+            // Repulsion - inverse square with cutoff
+            const repelRadius = 100;
+            if (dist < repelRadius) {
+                force = -this.repelForce * Math.pow(1 - dist / repelRadius, 2) * target.weight;
+            } else {
+                force = 0;
+            }
         }
 
         // Apply force
         p.vx += (dx / dist) * force;
         p.vy += (dy / dist) * force;
 
-        // Add slight random jitter for organic feel
-        p.vx += (Math.random() - 0.5) * 0.3;
-        p.vy += (Math.random() - 0.5) * 0.3;
+        // Add perlin-like noise for organic movement (using sine waves)
+        const noiseX = Math.sin(p.x * 0.01 + p.y * 0.01 + particleIndex * 0.1) * 0.2;
+        const noiseY = Math.cos(p.x * 0.01 - p.y * 0.01 + particleIndex * 0.1) * 0.2;
+        p.vx += noiseX;
+        p.vy += noiseY;
     }
 
     applyWanderForce(p) {
@@ -389,17 +407,72 @@ export class ParticleSystem {
         this.ctx.fillStyle = `rgba(10, 10, 15, ${this.trailAlpha})`;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Draw particles
+        // Batch particles by color for better performance
+        // Group particles into color buckets
+        const colorBuckets = new Map();
+
         for (const p of this.particles) {
             if (!p.active) continue;
 
-            // Get color from theme
-            const color = this.theme.gradient(p.colorIndex);
+            // Quantize color index for batching
+            const colorKey = Math.floor(p.colorIndex * 20) / 20;
 
-            // Draw particle with glow
+            if (!colorBuckets.has(colorKey)) {
+                colorBuckets.set(colorKey, []);
+            }
+            colorBuckets.get(colorKey).push(p);
+        }
+
+        // Draw each color batch
+        for (const [colorKey, particles] of colorBuckets) {
+            const color = this.theme.gradient(colorKey);
+
+            this.ctx.fillStyle = color;
+            this.ctx.beginPath();
+
+            for (const p of particles) {
+                // Draw particle
+                this.ctx.moveTo(p.x + p.size, p.y);
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            }
+
+            this.ctx.fill();
+        }
+    }
+
+    /**
+     * Render with glow effect (more expensive but prettier)
+     */
+    renderWithGlow() {
+        // Draw semi-transparent trail effect
+        this.ctx.fillStyle = `rgba(10, 10, 15, ${this.trailAlpha})`;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Draw glow layer first
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.3;
+        this.ctx.filter = 'blur(3px)';
+
+        for (const p of this.particles) {
+            if (!p.active) continue;
+
+            const color = this.theme.gradient(p.colorIndex);
+            this.ctx.fillStyle = color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        this.ctx.restore();
+
+        // Draw sharp particles on top
+        for (const p of this.particles) {
+            if (!p.active) continue;
+
+            const color = this.theme.gradient(p.colorIndex);
+            this.ctx.fillStyle = color;
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = color;
             this.ctx.fill();
         }
     }
