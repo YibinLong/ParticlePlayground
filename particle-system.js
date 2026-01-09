@@ -9,20 +9,22 @@ import { HAND_LANDMARKS, HAND_CONNECTIONS, FINGERTIPS } from './mediapipe-tracke
 const PHI = 1.618033988749895;
 const PHI_ANGLE = Math.PI * 2 * (1 - 1 / PHI);
 
-// Particle spread widths for different hand regions (tapered)
+// Particle spread widths for different hand regions (tapered for organic flow)
 const SPREAD_CONFIG = {
-    fingertip: 6,      // Narrow at fingertips
-    fingerSegment: 12, // Medium for finger segments
-    palm: 25,          // Wider for palm
-    wrist: 20          // Wide at wrist
+    fingertip: 4,      // Very narrow at fingertips
+    fingerSegment: 10, // Medium for finger segments
+    palm: 22,          // Wider for palm
+    wrist: 18          // Wide at wrist
 };
 
-// Face feature depth multipliers for 3D pop effect
+// Face feature depth multipliers for enhanced 3D pop effect
 const FACE_DEPTH = {
-    nose: 1.8,
-    cheekbone: 1.4,
-    eyeSocket: 1.3,
-    lips: 1.2,
+    nose: 2.5,         // Strong pop on nose
+    cheekbone: 1.8,    // Visible cheekbone depth
+    eyeSocket: 1.6,    // Recessed eye areas
+    lips: 1.4,         // Lips protrude slightly
+    chin: 1.5,         // Chin definition
+    forehead: 1.2,     // Slight forehead curve
     default: 1.0
 };
 
@@ -184,31 +186,41 @@ export class ParticleSystem {
     }
 
     extractHandTargets(handLandmarks) {
-        // Process each connection/bone with golden ratio distribution
+        // Process each connection/bone with golden ratio distribution for organic flow
         for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
             const start = handLandmarks[startIdx];
             const end = handLandmarks[endIdx];
 
             if (!start || !end) continue;
 
-            // Determine spread based on landmark type (tapered from palm to fingertips)
-            let spread;
-            if (FINGERTIPS.includes(endIdx)) {
-                spread = SPREAD_CONFIG.fingertip;
-            } else if (startIdx === HAND_LANDMARKS.WRIST) {
-                spread = SPREAD_CONFIG.palm;
-            } else if (endIdx >= 5 && endIdx <= 20) {
-                spread = SPREAD_CONFIG.fingerSegment;
+            // Determine spread based on landmark type (smoothly tapered from palm to fingertips)
+            let startSpread, endSpread;
+
+            // Start point spread
+            if (startIdx === HAND_LANDMARKS.WRIST) {
+                startSpread = SPREAD_CONFIG.wrist;
+            } else if ([5, 9, 13, 17].includes(startIdx)) { // MCP joints (palm)
+                startSpread = SPREAD_CONFIG.palm;
             } else {
-                spread = SPREAD_CONFIG.palm;
+                startSpread = SPREAD_CONFIG.fingerSegment;
             }
 
-            // Generate points along bone using golden ratio
-            const numPoints = 4;
-            for (let i = 0; i < numPoints; i++) {
-                const t = (i + 1) / (numPoints + 1);
+            // End point spread (tapered narrower toward fingertips)
+            if (FINGERTIPS.includes(endIdx)) {
+                endSpread = SPREAD_CONFIG.fingertip;
+            } else if ([6, 7, 10, 11, 14, 15, 18, 19].includes(endIdx)) { // PIP/DIP joints
+                endSpread = SPREAD_CONFIG.fingerSegment * 0.8;
+            } else {
+                endSpread = SPREAD_CONFIG.fingerSegment;
+            }
 
-                // Interpolate position
+            // Generate points along bone using golden ratio for smooth organic distribution
+            const numPoints = 5; // More points for smoother distribution
+            for (let i = 0; i < numPoints; i++) {
+                // Use golden ratio spacing along the bone
+                const t = (i + 0.5) / numPoints;
+
+                // Interpolate position along bone
                 const x = start.x + (end.x - start.x) * t;
                 const y = start.y + (end.y - start.y) * t;
                 const z = start.z + (end.z - start.z) * t;
@@ -217,21 +229,39 @@ export class ParticleSystem {
                 const screenX = (1 - x) * this.width;
                 const screenY = y * this.height;
 
-                // Use golden angle for perpendicular offset with taper
-                const angle = i * PHI_ANGLE;
-                const perpSpread = spread * (1 - t * 0.4); // Taper toward end
+                // Smooth taper interpolation using golden ratio
+                const taperT = t * PHI - Math.floor(t * PHI); // Golden ratio modulated taper
+                const perpSpread = startSpread + (endSpread - startSpread) * t;
 
+                // Use golden angle for perpendicular offset - creates organic sunflower-like pattern
+                const goldenOffset = i * PHI_ANGLE;
+
+                // Add primary target on bone
                 this.targets.push({
-                    x: screenX + Math.cos(angle) * perpSpread * (Math.random() * 0.5 + 0.5),
-                    y: screenY + Math.sin(angle) * perpSpread * (Math.random() * 0.5 + 0.5),
+                    x: screenX,
+                    y: screenY,
                     z: z,
-                    weight: FINGERTIPS.includes(endIdx) ? 1.8 : 1.0,
+                    weight: FINGERTIPS.includes(endIdx) ? 1.6 : 1.0,
                     type: 'hand'
                 });
+
+                // Add surrounding targets using golden angle for organic spread
+                for (let j = 0; j < 3; j++) {
+                    const angle = goldenOffset + j * PHI_ANGLE;
+                    const r = Math.sqrt((j + 1) / 4) * perpSpread;
+
+                    this.targets.push({
+                        x: screenX + Math.cos(angle) * r,
+                        y: screenY + Math.sin(angle) * r,
+                        z: z,
+                        weight: FINGERTIPS.includes(endIdx) ? 1.5 : 0.9,
+                        type: 'hand'
+                    });
+                }
             }
         }
 
-        // Add extra density at fingertips and wrist with golden angle distribution
+        // Add extra density at fingertips and wrist with golden angle sunflower distribution
         for (const tipIdx of [...FINGERTIPS, HAND_LANDMARKS.WRIST]) {
             const tip = handLandmarks[tipIdx];
             if (!tip) continue;
@@ -241,17 +271,41 @@ export class ParticleSystem {
             const isFingertip = FINGERTIPS.includes(tipIdx);
             const spread = isFingertip ? SPREAD_CONFIG.fingertip : SPREAD_CONFIG.wrist;
 
-            // Add multiple targets around the point using golden angle
-            const count = isFingertip ? 6 : 10;
+            // Add targets in golden angle sunflower pattern (Vogel's formula)
+            const count = isFingertip ? 8 : 12;
             for (let i = 0; i < count; i++) {
                 const angle = i * PHI_ANGLE;
-                const r = Math.sqrt(i / count) * spread;
+                const r = Math.sqrt(i / count) * spread; // Vogel's formula for uniform density
 
                 this.targets.push({
                     x: screenX + Math.cos(angle) * r,
                     y: screenY + Math.sin(angle) * r,
                     z: tip.z,
-                    weight: isFingertip ? 2.0 : 1.5,
+                    weight: isFingertip ? 2.2 : 1.6,
+                    type: 'hand'
+                });
+            }
+        }
+
+        // Add MCP joint clusters for palm definition
+        const mcpJoints = [5, 9, 13, 17]; // Index, Middle, Ring, Pinky MCPs
+        for (const mcpIdx of mcpJoints) {
+            const mcp = handLandmarks[mcpIdx];
+            if (!mcp) continue;
+
+            const screenX = (1 - mcp.x) * this.width;
+            const screenY = mcp.y * this.height;
+
+            // Golden angle palm cluster
+            for (let i = 0; i < 6; i++) {
+                const angle = i * PHI_ANGLE;
+                const r = Math.sqrt(i / 6) * SPREAD_CONFIG.palm * 0.6;
+
+                this.targets.push({
+                    x: screenX + Math.cos(angle) * r,
+                    y: screenY + Math.sin(angle) * r,
+                    z: mcp.z,
+                    weight: 1.2,
                     type: 'hand'
                 });
             }
@@ -259,16 +313,18 @@ export class ParticleSystem {
     }
 
     extractFaceTargets(faceLandmarks) {
-        // Face landmarks should form a very tight mesh (1-2 pixels as requested)
-        const tightSpread = 1.5;
+        // Face landmarks should form a very tight mesh (1-2 pixels for dense effect)
+        const tightSpread = 1.2;
 
-        // Key facial feature indices for boosted depth
-        const noseIndices = new Set([1, 2, 4, 5, 6, 168, 195, 197, 98, 327, 19, 94, 164]);
-        const cheekboneIndices = new Set([123, 147, 187, 207, 213, 352, 376, 411, 427, 436, 116, 345, 234, 454]);
-        const eyeSocketIndices = new Set([33, 133, 157, 158, 159, 160, 161, 163, 362, 263, 384, 385, 386, 387, 388, 390, 7, 249]);
-        const lipsIndices = new Set([61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 78, 308, 13, 14, 87, 0, 267]);
+        // Key facial feature indices for boosted depth - comprehensive mapping
+        const noseIndices = new Set([1, 2, 4, 5, 6, 168, 195, 197, 98, 327, 19, 94, 164, 48, 115, 220, 45, 4, 275, 440, 344, 278]);
+        const cheekboneIndices = new Set([123, 147, 187, 207, 213, 352, 376, 411, 427, 436, 116, 345, 234, 454, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323]);
+        const eyeSocketIndices = new Set([33, 133, 157, 158, 159, 160, 161, 163, 362, 263, 384, 385, 386, 387, 388, 390, 7, 249, 173, 246, 466, 398, 382, 381, 380, 374, 373, 390, 145, 144, 153, 154, 155]);
+        const lipsIndices = new Set([61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 78, 308, 13, 14, 87, 0, 267, 269, 270, 409, 415, 324, 318, 402, 317, 178, 88, 95, 191, 80, 81, 82]);
+        const chinIndices = new Set([152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356]);
+        const foreheadIndices = new Set([10, 151, 9, 8, 107, 66, 105, 63, 70, 46, 336, 296, 334, 293, 300, 276, 283, 282, 295, 285]);
 
-        // Sample face landmarks with tight clustering
+        // Sample face landmarks with very tight clustering
         for (let i = 0; i < faceLandmarks.length; i++) {
             const lm = faceLandmarks[i];
             if (!lm) continue;
@@ -277,28 +333,35 @@ export class ParticleSystem {
             const screenX = (1 - lm.x) * this.width;
             const screenY = lm.y * this.height;
 
-            // Determine depth multiplier for 3D pop effect
+            // Determine depth multiplier for enhanced 3D pop effect
             let depthMult = FACE_DEPTH.default;
             let weight = 1.0;
 
             if (noseIndices.has(i)) {
                 depthMult = FACE_DEPTH.nose;
-                weight = 1.5;
+                weight = 1.8;
             } else if (cheekboneIndices.has(i)) {
                 depthMult = FACE_DEPTH.cheekbone;
-                weight = 1.3;
+                weight = 1.5;
             } else if (eyeSocketIndices.has(i)) {
                 depthMult = FACE_DEPTH.eyeSocket;
-                weight = 1.4;
+                weight = 1.6;
             } else if (lipsIndices.has(i)) {
                 depthMult = FACE_DEPTH.lips;
-                weight = 1.2;
+                weight = 1.4;
+            } else if (chinIndices.has(i)) {
+                depthMult = FACE_DEPTH.chin;
+                weight = 1.3;
+            } else if (foreheadIndices.has(i)) {
+                depthMult = FACE_DEPTH.forehead;
+                weight = 1.1;
             }
 
-            // Add targets with very tight clustering using golden angle
-            const clusterCount = 2;
+            // Add targets with very tight clustering (1-2px) using golden angle
+            // More cluster points for key features
+            const clusterCount = (weight > 1.3) ? 3 : 2;
             for (let j = 0; j < clusterCount; j++) {
-                const angle = j * PHI_ANGLE + i * 0.1; // Offset by landmark index
+                const angle = j * PHI_ANGLE + i * 0.1; // Offset by landmark index for variety
                 const r = Math.sqrt(j / clusterCount) * tightSpread;
 
                 this.targets.push({
