@@ -4,7 +4,7 @@
  */
 
 import { ParticleSystem } from './particle-system.js';
-import { MediaPipeTracker } from './mediapipe-tracker.js';
+import { MediaPipeTracker } from './mediapipe-tracker.js?v=2';
 import { OverlayRenderer } from './overlay-renderer.js';
 import { GestureDetector } from './gesture-detector.js';
 

@@ -132,6 +132,9 @@ export class ParticleSystem {
         // Adjust active particle count based on targets
         this.adjustParticleCount();
 
+        // Check if we're in direct snap mode (attract mode with targets)
+        const directSnap = this.targets.length > 0 && this.mode === 'attract';
+
         // Update each particle
         for (let i = 0; i < this.particles.length; i++) {
             const p = this.particles[i];
@@ -144,25 +147,29 @@ export class ParticleSystem {
                 this.applyWanderForce(p, i);
             }
 
-            // Apply friction for smooth deceleration
-            p.vx *= this.friction;
-            p.vy *= this.friction;
+            // Only apply physics-based movement when NOT direct snapping
+            if (!directSnap) {
+                // Apply friction for smooth deceleration
+                p.vx *= this.friction;
+                p.vy *= this.friction;
 
-            // Clamp speed
-            const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-            if (speed > this.maxSpeed) {
-                p.vx = (p.vx / speed) * this.maxSpeed;
-                p.vy = (p.vy / speed) * this.maxSpeed;
+                // Clamp speed
+                const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                if (speed > this.maxSpeed) {
+                    p.vx = (p.vx / speed) * this.maxSpeed;
+                    p.vy = (p.vy / speed) * this.maxSpeed;
+                }
+
+                // Update position
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Soft boundary bounce
+                this.applyBoundary(p);
             }
 
-            // Update position
-            p.x += p.vx;
-            p.y += p.vy;
-
-            // Soft boundary bounce
-            this.applyBoundary(p);
-
             // Update color based on movement and time
+            const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
             p.colorIndex = p.baseColorIndex + this.time * 0.05 + speed * 0.005;
             if (p.colorIndex > 1) p.colorIndex -= Math.floor(p.colorIndex);
         }
@@ -398,53 +405,40 @@ export class ParticleSystem {
     applyTargetForce(p, particleIndex) {
         if (this.targets.length === 0) return;
 
-        // Distribute particles evenly across targets with some variation
-        const baseIndex = particleIndex % this.targets.length;
-        const variation = Math.floor(Math.sin(particleIndex * 0.07 + this.time) * 2);
-        const targetIndex = (baseIndex + variation + this.targets.length) % this.targets.length;
+        // Distribute particles evenly across targets
+        const targetIndex = particleIndex % this.targets.length;
         const target = this.targets[targetIndex];
 
-        const dx = target.x - p.x;
-        const dy = target.y - p.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
-
-        let force;
         if (this.mode === 'attract') {
-            // Smooth attraction with easing - feels like liquid cohesion
-            // Strong pull when far, gentle settle when close
-            const distFactor = 1 - Math.exp(-dist / 200);
-            force = this.attractionForce * distFactor * target.weight;
+            // DIRECT SNAP: Move particle directly to target position with smooth interpolation
+            const snapSpeed = 0.25; // How fast particles snap to position (0-1, higher = faster)
 
-            // Settling force - particles slow down near target
-            if (dist < 30) {
-                force *= 0.4 + (dist / 75);
-            }
+            // Directly interpolate position toward target
+            p.x += (target.x - p.x) * snapSpeed;
+            p.y += (target.y - p.y) * snapSpeed;
+
+            // Kill velocity when snapping to targets for stable positioning
+            p.vx *= 0.1;
+            p.vy *= 0.1;
+
+            // Add very subtle jitter for organic feel (optional, keeps particles alive)
+            const jitter = 0.3;
+            p.x += (Math.random() - 0.5) * jitter;
+            p.y += (Math.random() - 0.5) * jitter;
         } else {
-            // Repulsion - inverse square with smooth falloff
-            const repelRadius = 120;
+            // Repel mode - push particles away from targets
+            const dx = p.x - target.x;
+            const dy = p.y - target.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
+
+            const repelRadius = 150;
             if (dist < repelRadius) {
                 const repelFactor = Math.pow(1 - dist / repelRadius, 1.5);
-                force = -this.repelForce * repelFactor * target.weight;
-            } else {
-                // Very weak attraction to keep particles in frame
-                force = 0.01;
+                const force = this.repelForce * repelFactor * target.weight;
+                p.vx += (dx / dist) * force;
+                p.vy += (dy / dist) * force;
             }
         }
-
-        // Apply force
-        p.vx += (dx / dist) * force;
-        p.vy += (dy / dist) * force;
-
-        // Add organic noise for fluid motion (simplex-like using sine waves)
-        const noiseX = Math.sin(p.x * this.noiseScale + this.time * 0.5) *
-                       Math.cos(p.y * this.noiseScale * 1.3 + this.time * 0.3) *
-                       this.noiseStrength;
-        const noiseY = Math.cos(p.x * this.noiseScale * 0.9 - this.time * 0.4) *
-                       Math.sin(p.y * this.noiseScale + this.time * 0.6) *
-                       this.noiseStrength;
-
-        p.vx += noiseX;
-        p.vy += noiseY;
     }
 
     applyWanderForce(p, particleIndex) {
