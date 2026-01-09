@@ -166,9 +166,6 @@ class App {
             case 'KeyV':
                 this.toggleCamera();
                 break;
-            case 'KeyT':
-                this.cycleTheme();
-                break;
         }
     }
 
