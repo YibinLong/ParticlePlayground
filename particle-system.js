@@ -9,19 +9,20 @@ import { HAND_LANDMARKS, HAND_CONNECTIONS, FINGERTIPS } from './mediapipe-tracke
 const PHI = 1.618033988749895;
 const PHI_ANGLE = Math.PI * 2 * (1 - 1 / PHI);
 
-// Particle spread widths for different hand regions
+// Particle spread widths for different hand regions (tapered)
 const SPREAD_CONFIG = {
-    fingertip: 8,      // Narrow at fingertips
-    fingerSegment: 15, // Medium for finger segments
-    palm: 30,          // Wider for palm
-    wrist: 25          // Wide at wrist
+    fingertip: 6,      // Narrow at fingertips
+    fingerSegment: 12, // Medium for finger segments
+    palm: 25,          // Wider for palm
+    wrist: 20          // Wide at wrist
 };
 
-// Face feature depth multipliers
+// Face feature depth multipliers for 3D pop effect
 const FACE_DEPTH = {
-    nose: 1.5,
-    cheekbone: 1.3,
-    eyeSocket: 1.2,
+    nose: 1.8,
+    cheekbone: 1.4,
+    eyeSocket: 1.3,
+    lips: 1.2,
     default: 1.0
 };
 
@@ -46,23 +47,26 @@ export class ParticleSystem {
         // Mode: 'attract' or 'repel'
         this.mode = 'attract';
 
-        // Particle physics - tuned for liquid-like flow
-        this.attractionForce = 0.12;
-        this.repelForce = 0.2;
-        this.friction = 0.94;
-        this.maxSpeed = 12;
+        // Particle physics - tuned for smooth liquid-like flow
+        this.attractionForce = 0.08;
+        this.repelForce = 0.25;
+        this.friction = 0.92;
+        this.maxSpeed = 15;
+        this.noiseScale = 0.003;
+        this.noiseStrength = 0.3;
 
         // Trail effect
-        this.trailAlpha = 0.12;
+        this.trailAlpha = 0.1;
 
         // Particle array
         this.particles = [];
 
-        // Target landmarks (current and previous for smoothing)
+        // Target landmarks
         this.targets = [];
-        this.prevTargets = [];
         this.targetWeights = [];
-        this.targetSmoothing = 0.3; // Interpolation factor
+
+        // Time for noise animation
+        this.time = 0;
 
         // Initialize particles
         this.initParticles();
@@ -77,20 +81,21 @@ export class ParticleSystem {
     }
 
     createParticle(index) {
-        // Use golden angle for initial distribution
+        // Use golden angle for initial distribution - creates sunflower pattern
         const angle = index * PHI_ANGLE;
-        const radius = Math.sqrt(index / this.maxParticles) * Math.min(this.width, this.height) * 0.4;
+        const radius = Math.sqrt(index / this.maxParticles) * Math.min(this.width, this.height) * 0.45;
 
         const centerX = this.width / 2;
         const centerY = this.height / 2;
 
         return {
-            x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 100,
-            y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 100,
-            vx: (Math.random() - 0.5) * 2,
-            vy: (Math.random() - 0.5) * 2,
-            size: 1 + Math.random() * 1.5,
+            x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
+            y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
+            vx: (Math.random() - 0.5) * 1,
+            vy: (Math.random() - 0.5) * 1,
+            size: 1 + Math.random() * 1.2,
             colorIndex: Math.random(),
+            baseColorIndex: Math.random(), // Store original for stable coloring
             life: 1,
             targetIndex: -1,
             active: index < this.particleCount
@@ -117,6 +122,8 @@ export class ParticleSystem {
     }
 
     update(landmarks) {
+        this.time += 0.016; // ~60fps time step
+
         // Extract all targets from landmarks
         this.extractTargets(landmarks);
 
@@ -130,14 +137,12 @@ export class ParticleSystem {
             if (!p.active) continue;
 
             if (this.targets.length > 0) {
-                // Find nearest target or assigned target
                 this.applyTargetForce(p, i);
             } else {
-                // Gentle wandering when no targets
-                this.applyWanderForce(p);
+                this.applyWanderForce(p, i);
             }
 
-            // Apply physics
+            // Apply friction for smooth deceleration
             p.vx *= this.friction;
             p.vy *= this.friction;
 
@@ -155,9 +160,9 @@ export class ParticleSystem {
             // Soft boundary bounce
             this.applyBoundary(p);
 
-            // Update color based on movement
-            p.colorIndex += speed * 0.001;
-            if (p.colorIndex > 1) p.colorIndex -= 1;
+            // Update color based on movement and time
+            p.colorIndex = p.baseColorIndex + this.time * 0.05 + speed * 0.005;
+            if (p.colorIndex > 1) p.colorIndex -= Math.floor(p.colorIndex);
         }
     }
 
@@ -165,22 +170,20 @@ export class ParticleSystem {
         this.targets = [];
         this.targetWeights = [];
 
-        const screenScale = Math.min(this.width, this.height);
-
         // Process hands
         if (landmarks.hands && landmarks.hands.length > 0) {
             for (const hand of landmarks.hands) {
-                this.extractHandTargets(hand.landmarks, screenScale);
+                this.extractHandTargets(hand.landmarks);
             }
         }
 
         // Process face
         if (landmarks.face) {
-            this.extractFaceTargets(landmarks.face, screenScale);
+            this.extractFaceTargets(landmarks.face);
         }
     }
 
-    extractHandTargets(handLandmarks, screenScale) {
+    extractHandTargets(handLandmarks) {
         // Process each connection/bone with golden ratio distribution
         for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
             const start = handLandmarks[startIdx];
@@ -188,7 +191,7 @@ export class ParticleSystem {
 
             if (!start || !end) continue;
 
-            // Determine spread based on landmark type
+            // Determine spread based on landmark type (tapered from palm to fingertips)
             let spread;
             if (FINGERTIPS.includes(endIdx)) {
                 spread = SPREAD_CONFIG.fingertip;
@@ -201,7 +204,7 @@ export class ParticleSystem {
             }
 
             // Generate points along bone using golden ratio
-            const numPoints = 5;
+            const numPoints = 4;
             for (let i = 0; i < numPoints; i++) {
                 const t = (i + 1) / (numPoints + 1);
 
@@ -214,21 +217,21 @@ export class ParticleSystem {
                 const screenX = (1 - x) * this.width;
                 const screenY = y * this.height;
 
-                // Use golden angle for perpendicular offset
+                // Use golden angle for perpendicular offset with taper
                 const angle = i * PHI_ANGLE;
-                const perpSpread = spread * (1 - t * 0.3); // Taper toward end
+                const perpSpread = spread * (1 - t * 0.4); // Taper toward end
 
                 this.targets.push({
-                    x: screenX + Math.cos(angle) * perpSpread * Math.random(),
-                    y: screenY + Math.sin(angle) * perpSpread * Math.random(),
+                    x: screenX + Math.cos(angle) * perpSpread * (Math.random() * 0.5 + 0.5),
+                    y: screenY + Math.sin(angle) * perpSpread * (Math.random() * 0.5 + 0.5),
                     z: z,
-                    weight: FINGERTIPS.includes(endIdx) ? 1.5 : 1.0,
+                    weight: FINGERTIPS.includes(endIdx) ? 1.8 : 1.0,
                     type: 'hand'
                 });
             }
         }
 
-        // Add extra density at fingertips and wrist
+        // Add extra density at fingertips and wrist with golden angle distribution
         for (const tipIdx of [...FINGERTIPS, HAND_LANDMARKS.WRIST]) {
             const tip = handLandmarks[tipIdx];
             if (!tip) continue;
@@ -239,7 +242,7 @@ export class ParticleSystem {
             const spread = isFingertip ? SPREAD_CONFIG.fingertip : SPREAD_CONFIG.wrist;
 
             // Add multiple targets around the point using golden angle
-            const count = isFingertip ? 8 : 12;
+            const count = isFingertip ? 6 : 10;
             for (let i = 0; i < count; i++) {
                 const angle = i * PHI_ANGLE;
                 const r = Math.sqrt(i / count) * spread;
@@ -255,14 +258,15 @@ export class ParticleSystem {
         }
     }
 
-    extractFaceTargets(faceLandmarks, screenScale) {
-        // Face landmarks should form a very tight mesh
-        const tightSpread = 2; // 1-2 pixels as requested
+    extractFaceTargets(faceLandmarks) {
+        // Face landmarks should form a very tight mesh (1-2 pixels as requested)
+        const tightSpread = 1.5;
 
         // Key facial feature indices for boosted depth
-        const noseIndices = new Set([1, 2, 4, 5, 6, 168, 195, 197, 98, 327]);
-        const cheekboneIndices = new Set([123, 147, 187, 207, 213, 352, 376, 411, 427, 436]);
-        const eyeSocketIndices = new Set([33, 133, 157, 158, 159, 160, 161, 163, 362, 263, 384, 385, 386, 387, 388, 390]);
+        const noseIndices = new Set([1, 2, 4, 5, 6, 168, 195, 197, 98, 327, 19, 94, 164]);
+        const cheekboneIndices = new Set([123, 147, 187, 207, 213, 352, 376, 411, 427, 436, 116, 345, 234, 454]);
+        const eyeSocketIndices = new Set([33, 133, 157, 158, 159, 160, 161, 163, 362, 263, 384, 385, 386, 387, 388, 390, 7, 249]);
+        const lipsIndices = new Set([61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 78, 308, 13, 14, 87, 0, 267]);
 
         // Sample face landmarks with tight clustering
         for (let i = 0; i < faceLandmarks.length; i++) {
@@ -273,27 +277,35 @@ export class ParticleSystem {
             const screenX = (1 - lm.x) * this.width;
             const screenY = lm.y * this.height;
 
-            // Determine depth multiplier
+            // Determine depth multiplier for 3D pop effect
             let depthMult = FACE_DEPTH.default;
+            let weight = 1.0;
+
             if (noseIndices.has(i)) {
                 depthMult = FACE_DEPTH.nose;
+                weight = 1.5;
             } else if (cheekboneIndices.has(i)) {
                 depthMult = FACE_DEPTH.cheekbone;
+                weight = 1.3;
             } else if (eyeSocketIndices.has(i)) {
                 depthMult = FACE_DEPTH.eyeSocket;
+                weight = 1.4;
+            } else if (lipsIndices.has(i)) {
+                depthMult = FACE_DEPTH.lips;
+                weight = 1.2;
             }
 
             // Add targets with very tight clustering using golden angle
-            const clusterCount = 3;
+            const clusterCount = 2;
             for (let j = 0; j < clusterCount; j++) {
-                const angle = j * PHI_ANGLE;
+                const angle = j * PHI_ANGLE + i * 0.1; // Offset by landmark index
                 const r = Math.sqrt(j / clusterCount) * tightSpread;
 
                 this.targets.push({
                     x: screenX + Math.cos(angle) * r,
                     y: screenY + Math.sin(angle) * r,
                     z: lm.z * depthMult,
-                    weight: depthMult,
+                    weight: weight * depthMult,
                     type: 'face'
                 });
             }
@@ -308,7 +320,7 @@ export class ParticleSystem {
             this.particleCount = this.minParticles;
         } else {
             // More targets = more particles, up to max
-            const ratio = Math.min(1, targetCount / 2000);
+            const ratio = Math.min(1, targetCount / 1500);
             this.particleCount = Math.floor(
                 this.minParticles + (this.maxParticles - this.minParticles) * ratio
             );
@@ -321,13 +333,11 @@ export class ParticleSystem {
     }
 
     applyTargetForce(p, particleIndex) {
-        // Distribute particles evenly across targets
         if (this.targets.length === 0) return;
 
-        // Assign target based on particle index with some variation
+        // Distribute particles evenly across targets with some variation
         const baseIndex = particleIndex % this.targets.length;
-        // Add slight variation for more organic distribution
-        const variation = Math.floor(Math.sin(particleIndex * 0.1) * 3);
+        const variation = Math.floor(Math.sin(particleIndex * 0.07 + this.time) * 2);
         const targetIndex = (baseIndex + variation + this.targets.length) % this.targets.length;
         const target = this.targets[targetIndex];
 
@@ -335,24 +345,26 @@ export class ParticleSystem {
         const dy = target.y - p.y;
         const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
 
-        // Calculate force with smooth falloff
         let force;
         if (this.mode === 'attract') {
-            // Attraction with smooth easing - feels like liquid cohesion
-            const distFactor = 1 - Math.exp(-dist / 150);
+            // Smooth attraction with easing - feels like liquid cohesion
+            // Strong pull when far, gentle settle when close
+            const distFactor = 1 - Math.exp(-dist / 200);
             force = this.attractionForce * distFactor * target.weight;
 
-            // Add settling force when very close (particles settle into place)
-            if (dist < 20) {
-                force *= 0.5 + (dist / 40);
+            // Settling force - particles slow down near target
+            if (dist < 30) {
+                force *= 0.4 + (dist / 75);
             }
         } else {
-            // Repulsion - inverse square with cutoff
-            const repelRadius = 100;
+            // Repulsion - inverse square with smooth falloff
+            const repelRadius = 120;
             if (dist < repelRadius) {
-                force = -this.repelForce * Math.pow(1 - dist / repelRadius, 2) * target.weight;
+                const repelFactor = Math.pow(1 - dist / repelRadius, 1.5);
+                force = -this.repelForce * repelFactor * target.weight;
             } else {
-                force = 0;
+                // Very weak attraction to keep particles in frame
+                force = 0.01;
             }
         }
 
@@ -360,14 +372,19 @@ export class ParticleSystem {
         p.vx += (dx / dist) * force;
         p.vy += (dy / dist) * force;
 
-        // Add perlin-like noise for organic movement (using sine waves)
-        const noiseX = Math.sin(p.x * 0.01 + p.y * 0.01 + particleIndex * 0.1) * 0.2;
-        const noiseY = Math.cos(p.x * 0.01 - p.y * 0.01 + particleIndex * 0.1) * 0.2;
+        // Add organic noise for fluid motion (simplex-like using sine waves)
+        const noiseX = Math.sin(p.x * this.noiseScale + this.time * 0.5) *
+                       Math.cos(p.y * this.noiseScale * 1.3 + this.time * 0.3) *
+                       this.noiseStrength;
+        const noiseY = Math.cos(p.x * this.noiseScale * 0.9 - this.time * 0.4) *
+                       Math.sin(p.y * this.noiseScale + this.time * 0.6) *
+                       this.noiseStrength;
+
         p.vx += noiseX;
         p.vy += noiseY;
     }
 
-    applyWanderForce(p) {
+    applyWanderForce(p, particleIndex) {
         // Gentle center attraction when no targets
         const centerX = this.width / 2;
         const centerY = this.height / 2;
@@ -377,17 +394,18 @@ export class ParticleSystem {
         const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
 
         // Very gentle pull toward center
-        p.vx += (dx / dist) * 0.01;
-        p.vy += (dy / dist) * 0.01;
+        p.vx += (dx / dist) * 0.008;
+        p.vy += (dy / dist) * 0.008;
 
-        // Add wander noise
-        p.vx += (Math.random() - 0.5) * 0.5;
-        p.vy += (Math.random() - 0.5) * 0.5;
+        // Add wander noise for organic movement
+        const wanderAngle = this.time + particleIndex * PHI_ANGLE;
+        p.vx += Math.sin(wanderAngle) * 0.1;
+        p.vy += Math.cos(wanderAngle * 1.3) * 0.1;
     }
 
     applyBoundary(p) {
-        const margin = 50;
-        const bounce = 0.5;
+        const margin = 30;
+        const bounce = 0.3;
 
         if (p.x < margin) {
             p.x = margin;
@@ -412,14 +430,13 @@ export class ParticleSystem {
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         // Batch particles by color for better performance
-        // Group particles into color buckets
         const colorBuckets = new Map();
 
         for (const p of this.particles) {
             if (!p.active) continue;
 
             // Quantize color index for batching
-            const colorKey = Math.floor(p.colorIndex * 20) / 20;
+            const colorKey = Math.floor(p.colorIndex * 24) / 24;
 
             if (!colorBuckets.has(colorKey)) {
                 colorBuckets.set(colorKey, []);
@@ -435,7 +452,6 @@ export class ParticleSystem {
             this.ctx.beginPath();
 
             for (const p of particles) {
-                // Draw particle
                 this.ctx.moveTo(p.x + p.size, p.y);
                 this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             }
