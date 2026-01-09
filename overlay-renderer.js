@@ -44,15 +44,16 @@ export class OverlayRenderer {
     drawHandSkeleton(landmarks, isLeft) {
         const color = isLeft ? this.colors.handLeft : this.colors.handRight;
 
-        // Draw glow effect
         this.ctx.save();
-        this.ctx.shadowColor = color;
-        this.ctx.shadowBlur = 15;
 
-        // Draw connections
+        // First pass: draw outer glow (larger, more blur)
+        this.ctx.shadowColor = color;
+        this.ctx.shadowBlur = 20;
         this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 4;
         this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.globalAlpha = 0.4;
 
         for (const [start, end] of HAND_CONNECTIONS) {
             const p1 = landmarks[start];
@@ -66,15 +67,58 @@ export class OverlayRenderer {
             }
         }
 
-        // Draw all landmarks
+        // Second pass: draw bright core lines
+        this.ctx.globalAlpha = 1;
+        this.ctx.shadowBlur = 12;
+        this.ctx.lineWidth = 2;
+
+        for (const [start, end] of HAND_CONNECTIONS) {
+            const p1 = landmarks[start];
+            const p2 = landmarks[end];
+
+            if (p1 && p2) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x * this.width, p1.y * this.height);
+                this.ctx.lineTo(p2.x * this.width, p2.y * this.height);
+                this.ctx.stroke();
+            }
+        }
+
+        // Draw all landmarks with differentiated sizes
         this.ctx.fillStyle = color;
+        this.ctx.shadowBlur = 15;
 
         for (let i = 0; i < landmarks.length; i++) {
             const lm = landmarks[i];
             const isFingertip = FINGERTIPS.includes(i);
             const isWrist = i === HAND_LANDMARKS.WRIST;
-            const radius = isFingertip || isWrist ? 5 : 3;
 
+            // Larger dots at fingertips and wrist as specified
+            let radius;
+            if (isFingertip) {
+                radius = 6;
+            } else if (isWrist) {
+                radius = 7;
+            } else {
+                radius = 3;
+            }
+
+            // Draw outer glow for key points
+            if (isFingertip || isWrist) {
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.beginPath();
+                this.ctx.arc(
+                    lm.x * this.width,
+                    lm.y * this.height,
+                    radius + 3,
+                    0,
+                    Math.PI * 2
+                );
+                this.ctx.fill();
+            }
+
+            // Draw solid point
+            this.ctx.globalAlpha = 1;
             this.ctx.beginPath();
             this.ctx.arc(
                 lm.x * this.width,
