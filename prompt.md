@@ -10,4 +10,4 @@ The particle system should manage 8,000 to 15,000 particles that attract toward 
 
 For the UI, place mode toggle buttons in the top left, a keyboard shortcuts panel in the bottom right showing SPACE for mode and V for camera toggle, and a status indicator in the top right displaying loading state, detection status, or a Show your hands prompt. The whole experience should feel smooth and responsive with particles flowing like liquid to form recognizable shapes in real-time.
 
-Make a commit and push your changes after every single file edit.
+Create a separate commit for each logical change (e.g., feature, fix, refactor, etc) using Conventional Commit format and then push your changes straight onto the main branch. You have access to GitHub CLI.
