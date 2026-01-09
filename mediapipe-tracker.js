@@ -1,74 +1,65 @@
 /**
  * MediaPipe Tracker - Handles Face and Hand Detection
- * Uses MediaPipe's Face Mesh and Hand Landmarker
+ * Uses MediaPipe Vision Tasks API for reliable tracking
  */
 
-// MediaPipe CDN imports
-const MEDIAPIPE_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe';
-const HANDS_VERSION = 'hands@0.4.1675469240';
-const FACE_MESH_VERSION = 'face_mesh@0.4.1633559619';
-const DRAWING_UTILS_VERSION = 'drawing_utils@0.3.1620248257';
+// MediaPipe Vision Tasks CDN
+const VISION_TASKS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 
 export class MediaPipeTracker {
     constructor(videoElement) {
         this.video = videoElement;
-        this.hands = null;
-        this.faceMesh = null;
+        this.handLandmarker = null;
+        this.faceLandmarker = null;
         this.latestResults = {
             hands: [],
             face: null
         };
         this.isProcessing = false;
+        this.lastVideoTime = -1;
     }
 
     async initialize() {
-        // Load MediaPipe scripts dynamically
-        await this.loadScript(`${MEDIAPIPE_CDN}/${HANDS_VERSION}/hands.js`);
-        await this.loadScript(`${MEDIAPIPE_CDN}/${FACE_MESH_VERSION}/face_mesh.js`);
+        // Load the Vision Tasks library
+        await this.loadScript(`${VISION_TASKS_CDN}/vision_bundle.js`);
 
-        // Initialize Hands
-        this.hands = new window.Hands({
-            locateFile: (file) => {
-                return `${MEDIAPIPE_CDN}/${HANDS_VERSION}/${file}`;
-            }
-        });
+        const vision = window;
+        const { HandLandmarker, FaceLandmarker, FilesetResolver } = vision;
 
-        this.hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.7,
+        // Initialize the fileset resolver
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+            `${VISION_TASKS_CDN}/wasm`
+        );
+
+        // Initialize Hand Landmarker
+        this.handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
+            baseOptions: {
+                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                delegate: 'GPU'
+            },
+            runningMode: 'VIDEO',
+            numHands: 2,
+            minHandDetectionConfidence: 0.5,
+            minHandPresenceConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
 
-        this.hands.onResults((results) => {
-            this.processHandResults(results);
+        // Initialize Face Landmarker
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+            baseOptions: {
+                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                delegate: 'GPU'
+            },
+            runningMode: 'VIDEO',
+            numFaces: 1,
+            minFaceDetectionConfidence: 0.5,
+            minFacePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+            outputFaceBlendshapes: false,
+            outputFacialTransformationMatrixes: false
         });
 
-        // Initialize Face Mesh
-        this.faceMesh = new window.FaceMesh({
-            locateFile: (file) => {
-                return `${MEDIAPIPE_CDN}/${FACE_MESH_VERSION}/${file}`;
-            }
-        });
-
-        this.faceMesh.setOptions({
-            maxNumFaces: 1,
-            refineLandmarks: true,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.5
-        });
-
-        this.faceMesh.onResults((results) => {
-            this.processFaceResults(results);
-        });
-
-        // Wait for models to load
-        await Promise.all([
-            this.hands.initialize(),
-            this.faceMesh.initialize()
-        ]);
-
-        console.log('MediaPipe models loaded successfully');
+        console.log('MediaPipe Vision Tasks loaded successfully');
     }
 
     loadScript(src) {
@@ -88,13 +79,47 @@ export class MediaPipeTracker {
         });
     }
 
+    async detect() {
+        if (this.video.readyState < 2) {
+            return this.latestResults;
+        }
+
+        const currentTime = this.video.currentTime;
+
+        // Only process if video time has changed
+        if (currentTime === this.lastVideoTime) {
+            return this.latestResults;
+        }
+
+        this.lastVideoTime = currentTime;
+        const timestamp = performance.now();
+
+        try {
+            // Run hand detection
+            if (this.handLandmarker) {
+                const handResults = this.handLandmarker.detectForVideo(this.video, timestamp);
+                this.processHandResults(handResults);
+            }
+
+            // Run face detection
+            if (this.faceLandmarker) {
+                const faceResults = this.faceLandmarker.detectForVideo(this.video, timestamp);
+                this.processFaceResults(faceResults);
+            }
+        } catch (error) {
+            console.error('Detection error:', error);
+        }
+
+        return this.latestResults;
+    }
+
     processHandResults(results) {
         const hands = [];
 
-        if (results.multiHandLandmarks && results.multiHandedness) {
-            for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-                const landmarks = results.multiHandLandmarks[i];
-                const handedness = results.multiHandedness[i];
+        if (results.landmarks && results.handednesses) {
+            for (let i = 0; i < results.landmarks.length; i++) {
+                const landmarks = results.landmarks[i];
+                const handedness = results.handednesses[i];
 
                 hands.push({
                     landmarks: landmarks.map(lm => ({
@@ -102,7 +127,7 @@ export class MediaPipeTracker {
                         y: lm.y,
                         z: lm.z
                     })),
-                    handedness: handedness.label // 'Left' or 'Right'
+                    handedness: handedness[0]?.categoryName || 'Unknown'
                 });
             }
         }
@@ -111,9 +136,9 @@ export class MediaPipeTracker {
     }
 
     processFaceResults(results) {
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        if (results.faceLandmarks && results.faceLandmarks.length > 0) {
             this.latestResults.face = {
-                faceLandmarks: results.multiFaceLandmarks.map(face =>
+                faceLandmarks: results.faceLandmarks.map(face =>
                     face.map(lm => ({
                         x: lm.x,
                         y: lm.y,
@@ -126,37 +151,12 @@ export class MediaPipeTracker {
         }
     }
 
-    async detect() {
-        if (this.isProcessing) {
-            return this.latestResults;
-        }
-
-        if (this.video.readyState < 2) {
-            return this.latestResults;
-        }
-
-        this.isProcessing = true;
-
-        try {
-            // Run both detections in parallel
-            await Promise.all([
-                this.hands.send({ image: this.video }),
-                this.faceMesh.send({ image: this.video })
-            ]);
-        } catch (error) {
-            console.error('Detection error:', error);
-        }
-
-        this.isProcessing = false;
-        return this.latestResults;
-    }
-
     destroy() {
-        if (this.hands) {
-            this.hands.close();
+        if (this.handLandmarker) {
+            this.handLandmarker.close();
         }
-        if (this.faceMesh) {
-            this.faceMesh.close();
+        if (this.faceLandmarker) {
+            this.faceLandmarker.close();
         }
     }
 }
