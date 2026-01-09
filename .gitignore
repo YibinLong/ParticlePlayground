@@ -1,0 +1,12 @@
+# Playwright MCP testing artifacts
+.playwright-mcp/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
