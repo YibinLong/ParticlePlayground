@@ -36,7 +36,7 @@ export class MediaPipeTracker {
                 delegate: 'GPU'
             },
             runningMode: 'VIDEO',
-            numHands: 2,
+            numHands: 4,
             minHandDetectionConfidence: 0.5,
             minHandPresenceConfidence: 0.5,
             minTrackingConfidence: 0.5
@@ -49,7 +49,7 @@ export class MediaPipeTracker {
                 delegate: 'GPU'
             },
             runningMode: 'VIDEO',
-            numFaces: 1,
+            numFaces: 2,
             minFaceDetectionConfidence: 0.5,
             minFacePresenceConfidence: 0.5,
             minTrackingConfidence: 0.5,

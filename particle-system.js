@@ -186,9 +186,11 @@ export class ParticleSystem {
             }
         }
 
-        // Process face
-        if (landmarks.face) {
-            this.extractFaceTargets(landmarks.face);
+        // Process faces (up to 2 people)
+        if (landmarks.faces && landmarks.faces.length > 0) {
+            for (const face of landmarks.faces) {
+                this.extractFaceTargets(face);
+            }
         }
     }
 

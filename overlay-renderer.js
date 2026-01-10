@@ -36,9 +36,11 @@ export class OverlayRenderer {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.width, this.height);
 
-        // Draw face mesh first (behind hands)
+        // Draw face meshes first (behind hands) - supports up to 2 faces
         if (results.face && results.face.faceLandmarks && results.face.faceLandmarks.length > 0) {
-            this.drawFaceMesh(results.face.faceLandmarks[0]);
+            for (const faceLandmarks of results.face.faceLandmarks) {
+                this.drawFaceMesh(faceLandmarks);
+            }
         }
 
         // Draw hands on top

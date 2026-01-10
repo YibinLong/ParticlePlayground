@@ -252,10 +252,10 @@ class App {
     extractLandmarks(results) {
         const landmarks = {
             hands: [],
-            face: null
+            faces: []
         };
 
-        // Extract hand landmarks
+        // Extract hand landmarks (up to 4 hands for 2 people)
         if (results.hands) {
             for (const hand of results.hands) {
                 if (hand.landmarks) {
@@ -267,9 +267,11 @@ class App {
             }
         }
 
-        // Extract face landmarks
+        // Extract face landmarks (up to 2 faces)
         if (results.face && results.face.faceLandmarks && results.face.faceLandmarks.length > 0) {
-            landmarks.face = results.face.faceLandmarks[0];
+            for (const faceLandmarks of results.face.faceLandmarks) {
+                landmarks.faces.push(faceLandmarks);
+            }
         }
 
         return landmarks;
